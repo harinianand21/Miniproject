@@ -7,8 +7,9 @@
     "node": "24.x"
   },
   "scripts": {
-    "build": "npx vite build",
-    "dev": "vite"
+    "build": "echo \"skip local build\"",
+    "dev": "vite",
+    "preview": "vite preview"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
