@@ -2,5 +2,11 @@
     "framework": "vite",
     "buildCommand": "",
     "outputDirectory": "dist",
-    "installCommand": "npm install"
+    "installCommand": "npm install",
+    "routes": [
+        {
+            "src": "/(.*)",
+            "dest": "/index.html"
+        }
+    ]
 }
