@@ -1,0 +1,8 @@
+@import './fonts.css';
+@import './tailwind.css';
+@import './theme.css';
+
+/* Mobile-first container background */
+body {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
