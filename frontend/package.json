@@ -7,7 +7,7 @@
     "node": "24.x"
   },
   "scripts": {
-    "build": "echo \"skip local build\"",
+    "build": "node node_modules/vite/bin/vite.js build",
     "dev": "vite",
     "preview": "vite preview"
   },
