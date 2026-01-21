@@ -1,26 +1,32 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { AddDataScreen } from "../app/components/AddDataScreen";
-import { api } from "../services/api";
 
 export default function Report() {
     const navigate = useNavigate();
+    const [userLocation, setUserLocation] = useState<[number, number]>([13.0827, 80.2707]);
 
-    const handleSubmit = async (formData: any) => {
-        try {
-            const response = await api.post("/report", formData);
-            console.log("Backend response:", response.data);
-            navigate("/map");
-        } catch (error) {
-            console.error("Error submitting report:", error);
-            // Even if backend fails, navigate back to map so user isn't stuck
-            navigate("/map");
+    useEffect(() => {
+        if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition((position) => {
+                setUserLocation([position.coords.latitude, position.coords.longitude]);
+            });
         }
+    }, []);
+
+    const handleSubmissionComplete = () => {
+        navigate("/map");
     };
+
+    const { state } = useLocation();
+    const passedLocation = state as { lat: number; lng: number; name: string } | undefined;
 
     return (
         <AddDataScreen
             onBack={() => navigate("/map")}
-            onSubmit={handleSubmit}
+            onSubmit={handleSubmissionComplete}
+            userLocation={passedLocation ? [passedLocation.lat, passedLocation.lng] : userLocation}
+            initialName={passedLocation?.name}
         />
     );
 }

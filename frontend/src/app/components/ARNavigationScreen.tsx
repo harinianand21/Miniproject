@@ -55,8 +55,8 @@ export function ARNavigationScreen({ onStop, onVoiceCommand }: ARNavigationScree
       {showARPrompt && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
           <div className="text-center px-6 max-w-md">
-            <div className="w-24 h-24 mx-auto mb-6 bg-blue-500 rounded-full flex items-center justify-center">
-              <ArrowUp className="w-12 h-12 text-white" />
+            <div className="w-24 h-24 mx-auto mb-6 bg-blue-500 rounded-full flex items-center justify-center" aria-hidden="true" style={{ width: '96px', height: '96px' }}>
+              <ArrowUp className="w-12 h-12 text-white" size={48} style={{ width: '48px', height: '48px' }} />
             </div>
             <h2 className="text-white text-2xl font-bold mb-4">Start AR Navigation</h2>
             <p className="text-white/80 mb-8">
@@ -105,8 +105,8 @@ export function ARNavigationScreen({ onStop, onVoiceCommand }: ARNavigationScree
           <div className="absolute inset-0 bg-blue-500 rounded-full blur-xl opacity-50 animate-pulse" />
 
           {/* Arrow */}
-          <div className="relative w-24 h-24 bg-blue-500 rounded-full flex items-center justify-center shadow-2xl border-4 border-white/30">
-            <ArrowUp className="w-12 h-12 text-white animate-bounce" />
+          <div className="relative w-24 h-24 bg-blue-500 rounded-full flex items-center justify-center shadow-2xl border-4 border-white/30" style={{ width: '96px', height: '96px' }}>
+            <ArrowUp className="w-12 h-12 text-white animate-bounce" size={48} style={{ width: '48px', height: '48px' }} />
           </div>
         </div>
 

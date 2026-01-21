@@ -126,6 +126,8 @@
 
   body {
     @apply bg-background text-foreground;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
   }
 
   /**
@@ -178,12 +180,13 @@
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
   }
-  
+
   /* Custom animations for GuideAble AR */
   @keyframes slide-up {
     from {
       transform: translateY(100%);
     }
+
     to {
       transform: translateY(0);
     }

@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
+import { api } from '../../services/api';
 
 interface AddDataScreenProps {
   onBack: () => void;
-  onSubmit: (data: any) => void;
+  onSubmit: () => void;
+  userLocation?: [number, number];
+  initialName?: string;
 }
 
-export function AddDataScreen({ onBack, onSubmit }: AddDataScreenProps) {
+export function AddDataScreen({ onBack, onSubmit, userLocation, initialName }: AddDataScreenProps) {
   const [formData, setFormData] = useState({
-    location: '',
+    location: initialName || '',
     ramp: false,
     elevator: false,
     bathroom: false,
@@ -19,43 +22,101 @@ export function AddDataScreen({ onBack, onSubmit }: AddDataScreenProps) {
     notes: ''
   });
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialName || '');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  const mockPlaces = [
-    "Times Square, New York",
-    "Central Park, New York",
-    "Grand Central Terminal, New York",
-    "Empire State Building, New York",
-    "Brooklyn Bridge, New York",
-    "High Line, New York",
-    "Metropolitan Museum of Art, New York"
-  ];
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
-  const filteredPlaces = mockPlaces.filter(place =>
-    place.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.location) {
-      alert("Please select a location first");
+  // Real-time search using Nominatim
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query);
+    if (query.length < 3) {
+      setSearchResults([]);
       return;
     }
 
-    // Show success state
-    setIsSuccess(true);
-
-    // Wait for animation then call onSubmit
-    setTimeout(() => {
-      onSubmit(formData);
-    }, 3000);
+    setIsSearching(true);
+    setShowSuggestions(true);
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=in`);
+      const data = await response.json();
+      setSearchResults(data);
+    } catch (error) {
+      console.error("Search error:", error);
+    } finally {
+      setIsSearching(false);
+    }
   };
 
-  const handleSelectPlace = (place: string) => {
-    setFormData({ ...formData, location: place });
-    setSearchQuery(place);
+  const [reportingLocation, setReportingLocation] = useState<[number, number] | undefined>(userLocation);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.location && !reportingLocation) {
+      alert("Please select a location or provide current coordinates");
+      return;
+    }
+
+    // 10. Ensure POST body NEVER contains undefined, null, or NaN values
+    // 11. Add defensive validation before submit
+    const lat = Number(reportingLocation?.[0] || 13.0827);
+    const lng = Number(reportingLocation?.[1] || 80.2707);
+
+    if (isNaN(lat) || isNaN(lng)) {
+      alert("Invalid coordinates detected. Please select a valid location.");
+      return;
+    }
+
+    const type = formData.ramp ? 'ramp' :
+      formData.elevator ? 'elevator' :
+        formData.bathroom ? 'bathroom' :
+          formData.parking ? 'parking' :
+            formData.braille ? 'braille' :
+              formData.tactile ? 'tactile' :
+                formData.audioGuidance ? 'audio' : 'ramp';
+
+    const payload = {
+      latitude: lat,
+      longitude: lng,
+      type: type,
+      notes: formData.notes || "",
+      placeName: formData.location // Pass the selected address/name
+    };
+
+    console.log("[DEBUG] Submitting payload:", payload);
+
+    try {
+      await api.post("/points", payload);
+
+      setIsSuccess(true);
+      setTimeout(() => {
+        onSubmit();
+      }, 2500);
+    } catch (error: any) {
+      console.error("[DEBUG] Submission catch block:", error);
+
+      // 12. Update Axios error handling to show detailed server feedback
+      let errorMessage = "Network Error: Could not reach the server.";
+
+      if (error.response?.data) {
+        // Server responded with an error JSON (e.g., 503 DB unavailable or 400 Bad Request)
+        errorMessage = error.response.data.error || error.response.data.message || JSON.stringify(error.response.data);
+      } else if (error.message && error.message !== "Network Error") {
+        errorMessage = error.message;
+      }
+
+      alert(`Submission Failed: ${errorMessage}`);
+    }
+  };
+
+  const handleSelectPlace = (place: any) => {
+    const lat = parseFloat(place.lat);
+    const lng = parseFloat(place.lon);
+    setFormData({ ...formData, location: place.display_name });
+    setSearchQuery(place.display_name);
+    setReportingLocation([lat, lng]);
     setShowSuggestions(false);
   };
 
@@ -105,10 +166,7 @@ export function AddDataScreen({ onBack, onSubmit }: AddDataScreenProps) {
               <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setShowSuggestions(true);
-                }}
+                onChange={(e) => handleSearch(e.target.value)}
                 onFocus={() => setShowSuggestions(true)}
                 placeholder="Search or type location..."
                 className="w-full px-5 py-5 bg-gray-50/50 border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-lg"
@@ -116,16 +174,21 @@ export function AddDataScreen({ onBack, onSubmit }: AddDataScreenProps) {
 
               {showSuggestions && searchQuery.length > 0 && (
                 <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-100 rounded-2xl shadow-xl z-20 overflow-hidden max-h-60 overflow-y-auto animate-in slide-in-from-top-2">
-                  {filteredPlaces.length > 0 ? (
-                    filteredPlaces.map((place, idx) => (
+                  {isSearching ? (
+                    <div className="px-5 py-6 flex flex-col items-center gap-2">
+                      <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-gray-400 text-sm">Searching...</span>
+                    </div>
+                  ) : searchResults.length > 0 ? (
+                    searchResults.map((place, idx) => (
                       <button
                         key={idx}
                         type="button"
                         onClick={() => handleSelectPlace(place)}
                         className="w-full px-5 py-4 text-left hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0 flex items-center gap-3"
                       >
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                        <span className="text-gray-700">{place}</span>
+                        <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        <span className="text-gray-700 text-sm line-clamp-1">{place.display_name}</span>
                       </button>
                     ))
                   ) : (
@@ -134,10 +197,16 @@ export function AddDataScreen({ onBack, onSubmit }: AddDataScreenProps) {
                 </div>
               )}
             </div>
+            {reportingLocation && (
+              <p className="mt-2 text-sm text-gray-500 flex items-center gap-1">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                Coordinates: {reportingLocation[0].toFixed(4)}, {reportingLocation[1].toFixed(4)}
+              </p>
+            )}
             {formData.location && (
               <p className="mt-2 text-sm text-blue-600 flex items-center gap-1">
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
-                Location selected: {formData.location}
+                Place selected: {formData.location}
               </p>
             )}
           </div>

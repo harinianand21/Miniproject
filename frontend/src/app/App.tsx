@@ -11,8 +11,8 @@ export default function App() {
     navigate("/ar");
   };
 
-  const handleAddData = () => {
-    navigate("/report");
+  const handleAddData = (locationData?: { lat: number; lng: number; name: string }) => {
+    navigate("/report", { state: locationData });
   };
 
   const handleStopNavigation = () => {

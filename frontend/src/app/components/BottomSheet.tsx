@@ -33,8 +33,8 @@ export function BottomSheet({ marker, onClose, onVote, onStartNavigation }: Bott
 
           {/* Content Wrapper */}
           <div className="md:max-h-[70vh] md:overflow-y-auto">
-            {/* Location Name */}
-            <h2 className="mb-3 text-2xl font-bold">{marker.name}</h2>
+            {/* Location Name - MUST use placeName */}
+            <h2 className="mb-3 text-2xl font-bold">{marker.placeName || marker.name}</h2>
 
             {/* Type Badge */}
             <div className="mb-4">

@@ -7,7 +7,7 @@ import Report from "../pages/Report";
 type Props = {
     onVoiceCommand: () => void;
     onStartNavigation: () => void;
-    onAddData: () => void;
+    onAddData: (data?: { lat: number; lng: number; name: string }) => void;
 };
 
 export default function AppRouter({
