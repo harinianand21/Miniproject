@@ -7,8 +7,12 @@ export default function App() {
   const [showVoiceOverlay, setShowVoiceOverlay] = useState(false);
   const navigate = useNavigate();
 
-  const handleStartNavigation = () => {
-    navigate("/ar");
+  const handleStartNavigation = (location?: { lat: number; lng: number; name: string }) => {
+    if (!location) {
+      console.warn("No location provided for navigation");
+      return;
+    }
+    navigate("/ar-navigation", { state: location });
   };
 
   const handleAddData = (locationData?: { lat: number; lng: number; name: string }) => {

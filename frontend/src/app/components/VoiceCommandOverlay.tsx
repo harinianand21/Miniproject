@@ -3,8 +3,8 @@ import { Mic, X } from 'lucide-react';
 
 interface VoiceCommandOverlayProps {
   onClose: () => void;
-  onStartNavigation: () => void;
-  onAddData: () => void;
+  onStartNavigation: (data?: { lat: number; lng: number; name: string }) => void;
+  onAddData: (data?: { lat: number; lng: number; name: string }) => void;
   onStopNavigation: () => void;
 }
 

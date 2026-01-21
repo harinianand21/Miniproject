@@ -2,11 +2,12 @@ import { Routes, Route } from "react-router-dom";
 import Home from "../pages/Home";
 import Map from "../pages/Map";
 import AR from "../pages/AR";
+import ARNavigation from "../pages/ARNavigation";
 import Report from "../pages/Report";
 
 type Props = {
     onVoiceCommand: () => void;
-    onStartNavigation: () => void;
+    onStartNavigation: (data?: { lat: number; lng: number; name: string }) => void;
     onAddData: (data?: { lat: number; lng: number; name: string }) => void;
 };
 
@@ -34,6 +35,12 @@ export default function AppRouter({
                     <AR
                         onVoiceCommand={onVoiceCommand}
                     />
+                }
+            />
+            <Route
+                path="/ar-navigation"
+                element={
+                    <ARNavigation />
                 }
             />
             <Route path="/report" element={<Report />} />

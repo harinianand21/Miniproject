@@ -91,7 +91,7 @@ function MapEvents({ userLocation, destination, setDestination, setSelectedMarke
 
 interface MapsScreenProps {
   onAddData: (locationData?: { lat: number; lng: number; name: string }) => void;
-  onStartNavigation: () => void;
+  onStartNavigation: (dest?: { lat: number; lng: number; name: string }) => void;
   onVoiceCommand: () => void;
 }
 
@@ -541,7 +541,21 @@ export default function MapsScreen({
             marker={selectedMarker}
             onClose={() => setSelectedMarker(null)}
             onVote={handleVote}
-            onStartNavigation={onStartNavigation}
+            onStartNavigation={() => {
+              if (selectedMarker) {
+                onStartNavigation({
+                  lat: selectedMarker.lat,
+                  lng: selectedMarker.lng,
+                  name: selectedMarker.placeName || selectedMarker.name
+                });
+              } else if (destination) {
+                onStartNavigation({
+                  lat: destination[0],
+                  lng: destination[1],
+                  name: searchQuery || "Selected Location"
+                });
+              }
+            }}
           />
         </div>
       )}
