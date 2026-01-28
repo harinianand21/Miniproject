@@ -61,7 +61,7 @@ export function useWebXRAR() {
 
             // Request immersive-ar session with dom-overlay
             const session = await (navigator as any).xr.requestSession('immersive-ar', {
-                requiredFeatures: ['local'],
+                requiredFeatures: ['local-floor'],
                 optionalFeatures: ['dom-overlay'],
                 domOverlay: { root: document.body }
             });

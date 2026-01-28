@@ -192,7 +192,7 @@ export function ARCameraScreen({ onExit, destination }: ARCameraScreenProps) {
             window.removeEventListener('deviceorientation', handleOrientation);
             window.removeEventListener('deviceorientationabsolute', handleOrientation);
         };
-    }, []);
+    }, [destination, accPoints]);
 
     // Three.js & WebXR Setup
     const startAR = async () => {
@@ -267,7 +267,7 @@ export function ARCameraScreen({ onExit, destination }: ARCameraScreenProps) {
             // 4. Request Session
             setStatus('Requesting AR Session...');
             const session = await (navigator as any).xr.requestSession('immersive-ar', {
-                requiredFeatures: ['local'],
+                requiredFeatures: ['local-floor'],
                 optionalFeatures: ['dom-overlay'],
                 domOverlay: { root: containerRef.current }
             });
