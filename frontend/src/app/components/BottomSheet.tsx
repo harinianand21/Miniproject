@@ -1,10 +1,30 @@
 import { ThumbsUp, ThumbsDown, Navigation } from 'lucide-react';
 import { AccessibilityMarker } from '../../types/accessibility';
 
+/**
+ * Props for the Bottom Sheet component
+ * Displays detailed information about a selected accessibility marker
+ */
 interface BottomSheetProps {
+  /**
+   * The accessibility marker to display information for
+   */
   marker: AccessibilityMarker;
+
+  /**
+   * Callback to close the bottom sheet
+   */
   onClose: () => void;
+
+  /**
+   * Callback when user votes on the marker's accuracy
+   * @param direction - 'up' for upvote, 'down' for downvote
+   */
   onVote: (direction: 'up' | 'down') => void;
+
+  /**
+   * Callback to start navigation to this marker's location
+   */
   onStartNavigation: () => void;
 }
 

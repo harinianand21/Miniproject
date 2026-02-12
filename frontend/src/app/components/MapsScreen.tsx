@@ -5,31 +5,43 @@ import L from "leaflet";
 import { BottomSheet } from "./BottomSheet";
 import { AccessibilityMarker } from "../../types/accessibility";
 import { useMapRouting } from "../hooks/useMapRouting";
-import { api } from "../../services/api";
+import { supabase } from "../../lib/supabase";
 import { ThumbsUp, ThumbsDown } from "lucide-react";
+import { DEFAULT_LOCATION, MAP_CONFIG } from "../../config/constants";
 
-// Custom function to create emoji icons that match the previous UI
-const createEmojiIcon = (emoji: string) => L.divIcon({
-  html: `<div style="
-    font-size: 24px;
-    background: white;
-    border-radius: 50%;
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-    cursor: pointer;
-    border: 2px solid transparent;
-    transition: all 0.2s;
-  " onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
-    ${emoji}
-  </div>`,
-  className: 'custom-emoji-icon',
-  iconSize: [48, 48],
-  iconAnchor: [24, 24],
-});
+// Reusable factory for circular emoji icons
+const createFeatureIcon = (emoji: string, bg: string) =>
+  L.divIcon({
+    className: '',
+    html: `
+      <div style="
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        background: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        box-shadow: 0 6px 14px rgba(0,0,0,0.15);
+        border: 3px solid ${bg};
+      ">
+        ${emoji}
+      </div>
+    `,
+    iconSize: [42, 42],
+    iconAnchor: [21, 21],
+  });
+
+const featureIconMap: Record<string, L.DivIcon> = {
+  ramp: createFeatureIcon('♿', '#3B82F6'),
+  tactile: createFeatureIcon('👣', '#8B5CF6'),
+  bathroom: createFeatureIcon('🚻', '#10B981'),
+  elevator: createFeatureIcon('🛗', '#6366F1'),
+  parking: createFeatureIcon('🅿️', '#F59E0B'),
+  audio: createFeatureIcon('🔊', '#06B6D4'),
+  warning: createFeatureIcon('⚠️', '#EF4444'),
+};
 
 // Helper component to update map view and handle clicks
 // Moved outside to prevent re-mounting on every parent render
@@ -89,9 +101,36 @@ function MapEvents({ userLocation, destination, setDestination, setSelectedMarke
   return null;
 }
 
+/**
+ * Props for the Maps Screen component
+ * Main map interface for viewing accessibility features and planning navigation
+ */
 interface MapsScreenProps {
-  onAddData: (locationData?: { lat: number; lng: number; name: string }) => void;
-  onStartNavigation: (dest?: { lat: number; lng: number; name: string }) => void;
+  /**
+   * Callback to navigate to the Add Data screen
+   * @param locationData - Optional location data to pre-fill the form
+   */
+  onAddData: (locationData?: {
+    lat?: number;
+    lng?: number;
+    name?: string;
+    featureType?: string;
+  }) => void;
+
+  /**
+   * Callback to start AR navigation to a destination
+   * @param dest - Optional destination coordinates, name, and route
+   */
+  onStartNavigation: (dest?: {
+    lat?: number;
+    lng?: number;
+    name?: string;
+    route?: Array<{ lat: number; lng: number }>;
+  }) => void;
+
+  /**
+   * Callback to open voice command overlay
+   */
   onVoiceCommand: () => void;
 }
 
@@ -100,106 +139,27 @@ export default function MapsScreen({
   onStartNavigation,
   onVoiceCommand,
 }: MapsScreenProps) {
-  // Predefined realistic locations with anchor positions on the map view
-  const [markers, setMarkers] = useState<(AccessibilityMarker & { anchorPosition: { top: string; left: string } })[]>([
-    {
-      id: "1",
-      type: "ramp",
-      lat: 13.0827,
-      lng: 80.2707,
-      name: "Chennai Central",
-      placeName: "Chennai Central",
-      details: "Wheelchair ramp available at the main entrance gate.",
-      votes: 12,
-      anchorPosition: { top: "42%", left: "54%" }
-    },
-    {
-      id: "2",
-      type: "elevator",
-      lat: 13.085,
-      lng: 80.275,
-      name: "Egmore Metro",
-      placeName: "Egmore Metro",
-      details: "Operational elevator connecting street level to ticketing hall.",
-      votes: 8,
-      anchorPosition: { top: "68%", left: "32%" }
-    },
-    {
-      id: "3",
-      type: "obstacle",
-      lat: 13.08,
-      lng: 80.28,
-      name: "Anna Salai",
-      placeName: "Anna Salai",
-      details: "Sidewalk repair work blocking the pedestrian path.",
-      votes: -5,
-      anchorPosition: { top: "55%", left: "62%" }
-    },
-    {
-      id: "4",
-      type: "bathroom",
-      lat: 13.083,
-      lng: 80.272,
-      name: "Government Hospital Precinct",
-      placeName: "Government Hospital Precinct",
-      details: "Public accessible restroom with wide stall entry.",
-      votes: 15,
-      anchorPosition: { top: "48%", left: "48%" }
-    },
-    {
-      id: "6",
-      type: "braille",
-      lat: 13.081,
-      lng: 80.273,
-      name: "Victoria Public Hall",
-      placeName: "Victoria Public Hall",
-      details: "Tactile site map and Braille directory available at the information desk.",
-      votes: 7,
-      anchorPosition: { top: "35%", left: "58%" }
-    },
-    {
-      id: "7",
-      type: "audio",
-      lat: 13.084,
-      lng: 80.276,
-      name: "Chintadripet MRTS Station",
-      placeName: "Chintadripet MRTS Station",
-      details: "Beacon-based audio announcements for visually impaired travelers.",
-      votes: 11,
-      anchorPosition: { top: "72%", left: "52%" }
-    },
-    {
-      id: "8",
-      type: "tactile",
-      lat: 13.078,
-      lng: 80.270,
-      name: "General Hospital Road",
-      placeName: "General Hospital Road",
-      details: "Clean tactile paving along the primary pedestrian stretch.",
-      votes: 18,
-      anchorPosition: { top: "44%", left: "38%" }
-    },
-    {
-      id: "9",
-      type: "parking",
-      lat: 13.0815,
-      lng: 80.274,
-      name: "City Square Parking",
-      placeName: "City Square Parking",
-      details: "Designated disabled parking spots near the elevator.",
-      votes: 20,
-      anchorPosition: { top: "50%", left: "50%" }
-    }
-  ]);
-  const [crowdsourcedPoints, setCrowdsourcedPoints] = useState<any[]>([]);
+  const [markers, setMarkers] = useState<any[]>([]);
 
-  // Fetch crowdsourced points from backend
+  // Fetch points from Supabase
   const fetchPoints = async () => {
     try {
-      const response = await api.get("/points");
-      setCrowdsourcedPoints(response.data);
+      const { data, error } = await supabase.from('accessibility_points').select('*');
+      if (error) throw error;
+
+      // Filter out any markers with missing or invalid coordinates to prevent crashes
+      const validPoints = (data || []).filter(item =>
+        item &&
+        typeof item.latitude === 'number' &&
+        typeof item.longitude === 'number' &&
+        !isNaN(item.latitude) &&
+        !isNaN(item.longitude)
+      );
+
+      setMarkers(validPoints);
     } catch (error) {
       console.error("Error fetching points:", error);
+      setMarkers([]); // Ensure empty state on error
     }
   };
 
@@ -207,10 +167,38 @@ export default function MapsScreen({
     fetchPoints();
   }, []);
 
-  const handlePointVote = async (id: string, voteType: 'upvote' | 'downvote') => {
+  const handleVote = async (id: string, voteType: 'up' | 'down') => {
     try {
-      await api.patch(`/points/${id}/vote`, { voteType });
-      fetchPoints(); // Refresh points after voting
+      const marker = markers.find(m => m.id === id);
+      if (!marker) return;
+
+      const newUpvotes = voteType === 'up' ? (marker.upvotes || 0) + 1 : (marker.upvotes || 0);
+      const newDownvotes = voteType === 'down' ? (marker.downvotes || 0) + 1 : (marker.downvotes || 0);
+
+      const { error } = await supabase
+        .from('accessibility_points')
+        .update({ upvotes: newUpvotes, downvotes: newDownvotes })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Update local state for immediate feedback
+      setMarkers(prev => prev.map(m =>
+        m.id === id ? { ...m, upvotes: newUpvotes, downvotes: newDownvotes } : m
+      ));
+
+      // Also update selectedMarker if it matches
+      setSelectedMarker(prev => {
+        if (prev && prev.id === id) {
+          return {
+            ...prev,
+            upvotes: newUpvotes,
+            downvotes: newDownvotes,
+            votes: newUpvotes - newDownvotes
+          };
+        }
+        return prev;
+      });
     } catch (error) {
       console.error("Error voting:", error);
     }
@@ -266,7 +254,7 @@ export default function MapsScreen({
   };
 
   const { routeCoordinates, getRoute } = useMapRouting();
-  const [userLocation, setUserLocation] = useState<[number, number]>([13.0827, 80.2707]);
+  const [userLocation, setUserLocation] = useState<[number, number]>([DEFAULT_LOCATION.lat, DEFAULT_LOCATION.lng]);
   const [destination, setDestination] = useState<[number, number] | null>(null);
 
   // Get real user location on mount (using watchPosition for live updates)
@@ -305,30 +293,7 @@ export default function MapsScreen({
     }
   }, [selectedMarker]);
 
-  const handleVote = (direction: "up" | "down") => {
-    if (!selectedMarker) return;
-
-    const change = direction === "up" ? 1 : -1;
-
-    // Check if it's a crowdsourced point
-    const isCrowdsourced = crowdsourcedPoints.some(p => p._id === selectedMarker.id);
-
-    if (isCrowdsourced) {
-      handlePointVote(selectedMarker.id, direction === "up" ? 'upvote' : 'downvote');
-      setSelectedMarker(prev => prev ? { ...prev, votes: prev.votes + change } : null);
-      return;
-    }
-
-    setMarkers((prev) =>
-      prev.map((m) =>
-        m.id === selectedMarker.id ? { ...m, votes: m.votes + change } : m
-      )
-    );
-
-    setSelectedMarker((prev) =>
-      prev ? { ...prev, votes: prev.votes + change } : null
-    );
-  };
+  // Voting logic is handled by the async handleVote function defined above
 
   return (
     <div className="relative w-screen h-screen overflow-hidden">
@@ -352,29 +317,37 @@ export default function MapsScreen({
           pathOptions={{ color: 'blue', fillColor: 'blue', fillOpacity: 0.8 }}
         />
 
-        {/* Accessibility Markers (Predefined) */}
+        {/* Accessibility Markers from Supabase */}
         {markers.map((marker) => {
-          const emojiMap: Record<string, string> = {
-            ramp: "♿",
-            elevator: "⬆️",
-            obstacle: "⚠️",
-            bathroom: "🚻",
-            parking: "🅿️",
-            braille: "🖐️",
-            audio: "🔊",
-            stairs: "🏃",
-            tactile: "👣"
-          };
+          const rawType = (marker.feature_type || marker.featureType || marker.type || 'ramp') as string;
+          const normalizedType = rawType.toLowerCase();
 
           return (
             <Marker
               key={marker.id}
-              position={[marker.lat, marker.lng]}
-              icon={createEmojiIcon(emojiMap[marker.type] || "📍")}
+              position={[marker.latitude, marker.longitude]}
+              icon={featureIconMap[normalizedType] ?? featureIconMap.ramp}
               eventHandlers={{
                 click: () => {
-                  setSelectedMarker(marker);
-                  setDestination([marker.lat, marker.lng]); // TRIGGERS ROUTING
+                  const name = marker.place_name || marker.placeName || marker.title || "";
+                  const feature = normalizedType;
+                  const details = marker.description || marker.notes || "No additional information provided.";
+
+                  setSelectedMarker({
+                    id: marker.id,
+                    type: feature as any,
+                    name: name,
+                    details: details,
+                    lat: marker.latitude,
+                    lng: marker.longitude,
+                    votes: (marker.upvotes || 0) - (marker.downvotes || 0),
+                    placeName: name,
+                    title: name,
+                    description: details,
+                    upvotes: marker.upvotes,
+                    downvotes: marker.downvotes
+                  });
+                  setDestination([marker.latitude, marker.longitude]);
                 },
               }}
             />
@@ -388,52 +361,6 @@ export default function MapsScreen({
             pathOptions={{ color: '#3b82f6', weight: 6, opacity: 0.8, lineJoin: 'round' }}
           />
         )}
-
-        {/* Crowdsourced Markers (User-Added) */}
-        {crowdsourcedPoints.map((point) => {
-          const emojiMap: Record<string, string> = {
-            ramp: "♿",
-            elevator: "⬆️",
-            obstacle: "⚠️",
-            bathroom: "🚻",
-            parking: "🅿️",
-            braille: "🖐️",
-            audio: "🔊",
-            stairs: "🏃",
-            tactile: "👣"
-          };
-
-          const featureType = (point.featureType || point.type) as keyof typeof emojiMap;
-
-          return (
-            <Marker
-              key={point._id}
-              position={[point.latitude, point.longitude]}
-              icon={createEmojiIcon(emojiMap[featureType] || "📍")}
-              eventHandlers={{
-                click: () => {
-                  // UNIFIED RICH CARD DATA
-                  setSelectedMarker({
-                    id: point._id,
-                    type: featureType as any,
-                    name: point.placeName || point.title || "", // Backend is now guaranteed to provide a name
-                    details: point.description || point.notes || "No additional information provided.",
-                    lat: point.latitude,
-                    lng: point.longitude,
-                    votes: point.upvotes || 0,
-                    // Additional fields for completeness
-                    placeName: point.placeName,
-                    title: point.title,
-                    description: point.description,
-                    upvotes: point.upvotes,
-                    downvotes: point.downvotes
-                  });
-                  setDestination([point.latitude, point.longitude]); // TRIGGERS ROUTING
-                },
-              }}
-            />
-          );
-        })}
 
         {/* Destination Marker (if user clicked on map) */}
         {destination && !selectedMarker && (
@@ -540,19 +467,21 @@ export default function MapsScreen({
           <BottomSheet
             marker={selectedMarker}
             onClose={() => setSelectedMarker(null)}
-            onVote={handleVote}
+            onVote={(dir) => handleVote(selectedMarker.id, dir)}
             onStartNavigation={() => {
               if (selectedMarker) {
                 onStartNavigation({
                   lat: selectedMarker.lat,
                   lng: selectedMarker.lng,
-                  name: selectedMarker.placeName || selectedMarker.name
+                  name: selectedMarker.placeName || selectedMarker.name,
+                  route: routeCoordinates // Pass route for AR waypoint visualization
                 });
               } else if (destination) {
                 onStartNavigation({
                   lat: destination[0],
                   lng: destination[1],
-                  name: searchQuery || "Selected Location"
+                  name: searchQuery || "Selected Location",
+                  route: routeCoordinates // Pass route for AR waypoint visualization
                 });
               }
             }}

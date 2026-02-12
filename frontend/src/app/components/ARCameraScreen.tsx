@@ -1,14 +1,41 @@
 import { useState, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { XCircle, Crosshair, Volume2, VolumeX, Info } from 'lucide-react';
-import { api } from '../../services/api';
+import { supabase } from "../../lib/supabase";
 
+/**
+ * Props for the AR Camera Screen component
+ * This component handles WebXR AR navigation with Three.js
+ */
 interface ARCameraScreenProps {
+    /**
+     * Callback function invoked when user exits AR mode.
+     * Should navigate back to the map screen.
+     */
     onExit: () => void;
-    destination: { lat: number; lng: number; name: string } | null;
+
+    /**
+     * Destination coordinates and display name for AR navigation.
+     * If null, AR will start but won't show navigation arrow.
+     * The arrow will point toward this destination using compass bearing.
+     */
+    destination: {
+        /** Latitude of the destination */
+        lat: number;
+        /** Longitude of the destination */
+        lng: number;
+        /** Human-readable name of the destination */
+        name: string;
+    } | null;
+
+    /**
+     * Optional array of route waypoints from OSRM routing
+     * Used to visualize the path in AR with 3D markers
+     */
+    route?: Array<{ lat: number; lng: number }>;
 }
 
-export function ARCameraScreen({ onExit, destination }: ARCameraScreenProps) {
+export function ARCameraScreen({ onExit, destination, route = [] }: ARCameraScreenProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [status, setStatus] = useState<string>('Initializing...');
     const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -23,7 +50,7 @@ export function ARCameraScreen({ onExit, destination }: ARCameraScreenProps) {
 
     // Accessibility Guidance States
     const [accPoints, setAccPoints] = useState<any[]>([]);
-    const [announcedIds] = useState<Set<string>>(new Set());
+    const announcedIds = useRef<Set<string>>(new Set());
     const [activeAlert, setActiveAlert] = useState<{ message: string; type: string; name: string } | null>(null);
     const [voiceEnabled, setVoiceEnabled] = useState(true);
 
@@ -86,14 +113,14 @@ export function ARCameraScreen({ onExit, destination }: ARCameraScreenProps) {
 
     // Trigger Guidance (Voice + UI)
     const triggerGuidance = (point: any) => {
-        if (announcedIds.has(point._id || point.id)) return;
+        if (announcedIds.current.has(point.id)) return;
 
         const type = point.featureType || point.type;
         const name = point.placeName || point.name || "this location";
         const message = getGuidanceMessage(type, name);
 
         // Mark as announced
-        announcedIds.add(point._id || point.id);
+        announcedIds.current.add(point.id);
 
         // UI Alert
         setActiveAlert({ message, type, name });
@@ -113,16 +140,26 @@ export function ARCameraScreen({ onExit, destination }: ARCameraScreenProps) {
     useEffect(() => {
         const fetchPoints = async () => {
             try {
-                const response = await api.get('/points');
-                setAccPoints(response.data);
+                const { data, error } = await supabase.from('accessibility_points').select('*');
+                if (error) throw error;
+
+                // Defensive filtering for AR stability
+                const validPoints = (data || []).filter(item =>
+                    item &&
+                    typeof (item.latitude || item.lat) === 'number' &&
+                    typeof (item.longitude || item.lng) === 'number'
+                );
+
+                setAccPoints(validPoints);
             } catch (err) {
                 console.error("Failed to fetch accessibility points:", err);
+                setAccPoints([]);
             }
         };
         fetchPoints();
     }, []);
 
-    // GPS Tracking
+    // GPS Tracking and Device Orientation
     useEffect(() => {
         if (!("geolocation" in navigator)) {
             setError("Geolocation is not supported by your browser");
@@ -164,7 +201,7 @@ export function ARCameraScreen({ onExit, destination }: ARCameraScreenProps) {
             { enableHighAccuracy: true }
         );
 
-        // Device Orientation Tracking
+        // Device Orientation Tracking with iOS 13+ Permission Request
         const handleOrientation = (e: DeviceOrientationEvent) => {
             let h: number | null = null;
 
@@ -183,9 +220,31 @@ export function ARCameraScreen({ onExit, destination }: ARCameraScreenProps) {
             }
         };
 
-        window.addEventListener('deviceorientation', handleOrientation);
-        // some browsers prefer absolute
-        window.addEventListener('deviceorientationabsolute', handleOrientation);
+        // Request permission for iOS 13+ devices
+        const setupOrientation = async () => {
+            // Check if permission API exists (iOS 13+)
+            if (typeof DeviceOrientationEvent !== 'undefined' &&
+                typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+                try {
+                    const permission = await (DeviceOrientationEvent as any).requestPermission();
+                    if (permission !== 'granted') {
+                        console.warn('Device orientation permission denied');
+                        setError('Compass permission denied. AR arrow direction may not work correctly.');
+                        return;
+                    }
+                } catch (err) {
+                    console.error('Error requesting orientation permission:', err);
+                    setError('Could not access device compass. Please check browser permissions.');
+                    return;
+                }
+            }
+
+            // Add event listeners after permission granted (or not required)
+            window.addEventListener('deviceorientation', handleOrientation);
+            window.addEventListener('deviceorientationabsolute', handleOrientation);
+        };
+
+        setupOrientation();
 
         return () => {
             navigator.geolocation.clearWatch(watchId);
@@ -264,6 +323,42 @@ export function ARCameraScreen({ onExit, destination }: ARCameraScreenProps) {
             scene.add(camera);
             arrowRef.current = arrowWrapper;
 
+            // 3.6 Create Waypoint Markers (if route exists)
+            const waypointGroup = new THREE.Group();
+            if (route && route.length > 0) {
+                console.log(`[AR] Creating ${route.length} waypoint markers`);
+
+                route.forEach((waypoint, index) => {
+                    // Create sphere marker for each waypoint
+                    const geometry = new THREE.SphereGeometry(0.15, 16, 16);
+
+                    // Color code: green for next waypoint, blue for others
+                    const color = index === 0 ? 0x10b981 : 0x3b82f6;
+                    const material = new THREE.MeshBasicMaterial({
+                        color,
+                        transparent: true,
+                        opacity: 0.8
+                    });
+
+                    const sphere = new THREE.Mesh(geometry, material);
+
+                    // Store waypoint data for positioning updates
+                    (sphere as any).waypointData = {
+                        lat: waypoint.lat,
+                        lng: waypoint.lng,
+                        index
+                    };
+
+                    waypointGroup.add(sphere);
+                });
+
+                scene.add(waypointGroup);
+                console.log('[AR] Waypoint markers added to scene');
+            }
+
+            // Store waypoint group ref for updates
+            const waypointGroupRef = waypointGroup;
+
             // 4. Request Session
             setStatus('Requesting AR Session...');
             const session = await (navigator as any).xr.requestSession('immersive-ar', {
@@ -290,6 +385,46 @@ export function ARCameraScreen({ onExit, destination }: ARCameraScreenProps) {
                     // Simple smoothing (Lerp-like but manual for now)
                     arrowRef.current.rotation.y = rad;
                 }
+
+                // Update waypoint positions based on user location
+                if (waypointGroupRef && waypointGroupRef.children.length > 0 && coords) {
+                    waypointGroupRef.children.forEach((child: any) => {
+                        if (child.waypointData) {
+                            const { lat, lng, index } = child.waypointData;
+
+                            // Calculate distance and bearing to this waypoint
+                            const dist = calculateDistance(coords.lat, coords.lng, lat, lng);
+                            const brng = calculateBearing(coords.lat, coords.lng, lat, lng);
+
+                            // Convert to relative angle from user's heading
+                            const relativeAngle = (brng - headingRef.current) * Math.PI / 180;
+
+                            // Position waypoint in 3D space
+                            // Scale distance for visibility (1 meter real = 0.1 units in AR)
+                            const scaledDist = Math.min(dist * 0.1, 10); // Cap at 10 units
+
+                            child.position.x = Math.sin(relativeAngle) * scaledDist;
+                            child.position.z = -Math.cos(relativeAngle) * scaledDist;
+                            child.position.y = -0.5; // Slightly below eye level
+
+                            // Update color based on proximity
+                            if (dist < 20) {
+                                // Close to waypoint - make it green
+                                (child.material as THREE.MeshBasicMaterial).color.setHex(0x10b981);
+                            } else if (index === 0) {
+                                // Next waypoint - green
+                                (child.material as THREE.MeshBasicMaterial).color.setHex(0x10b981);
+                            } else {
+                                // Other waypoints - blue
+                                (child.material as THREE.MeshBasicMaterial).color.setHex(0x3b82f6);
+                            }
+
+                            // Hide waypoints that are too far or behind user
+                            child.visible = dist < 500 && scaledDist > 0.5;
+                        }
+                    });
+                }
+
                 renderer.render(scene, camera);
             };
             renderer.setAnimationLoop(onAnimationFrame);

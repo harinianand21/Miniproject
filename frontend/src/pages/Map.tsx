@@ -6,8 +6,18 @@ export default function Map({
     onAddData
 }: {
     onVoiceCommand: () => void;
-    onStartNavigation: (dest?: { lat: number; lng: number; name: string }) => void;
-    onAddData: (data?: { lat: number; lng: number; name: string }) => void;
+    onStartNavigation: (dest?: {
+        lat?: number;
+        lng?: number;
+        name?: string;
+        route?: Array<{ lat: number; lng: number }>;
+    }) => void;
+    onAddData: (locationData?: {
+        lat?: number;
+        lng?: number;
+        name?: string;
+        featureType?: string;
+    }) => void;
 }) {
     return (
         <MapsScreen

@@ -1,24 +1,53 @@
 import { useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
-import { api } from '../../services/api';
+import { supabase } from "../../lib/supabase";
+import { DEFAULT_LOCATION } from '../../config/constants';
+import { useNotification } from '../../hooks/useNotification';
 
+/**
+ * Props for the Add Data Screen component
+ * Form for submitting new accessibility features to the database
+ */
 interface AddDataScreenProps {
+  /**
+   * Callback to navigate back to the previous screen
+   */
   onBack: () => void;
+
+  /**
+   * Callback invoked after successful form submission
+   */
   onSubmit: () => void;
+
+  /**
+   * Optional user's current GPS coordinates
+   * Used as fallback if no location is selected
+   */
   userLocation?: [number, number];
+
+  /**
+   * Optional initial location name to pre-fill the form
+   * Typically passed from map marker or search result
+   */
   initialName?: string;
+
+  /**
+   * Optional initial feature type to pre-select in the form
+   */
+  initialFeatureType?: string;
 }
 
-export function AddDataScreen({ onBack, onSubmit, userLocation, initialName }: AddDataScreenProps) {
+export function AddDataScreen({ onBack, onSubmit, userLocation, initialName, initialFeatureType }: AddDataScreenProps) {
+  const notify = useNotification();
   const [formData, setFormData] = useState({
     location: initialName || '',
-    ramp: false,
-    elevator: false,
-    bathroom: false,
-    parking: false,
-    braille: false,
-    audioGuidance: false,
-    tactile: false,
+    ramp: initialFeatureType === 'ramp',
+    elevator: initialFeatureType === 'elevator',
+    bathroom: initialFeatureType === 'bathroom',
+    parking: initialFeatureType === 'parking',
+    braille: initialFeatureType === 'braille',
+    audioGuidance: initialFeatureType === 'audio',
+    tactile: initialFeatureType === 'tactile',
     notes: ''
   });
 
@@ -55,21 +84,21 @@ export function AddDataScreen({ onBack, onSubmit, userLocation, initialName }: A
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.location && !reportingLocation) {
-      alert("Please select a location or provide current coordinates");
+      notify.error("Please select a location or provide current coordinates");
       return;
     }
 
     // 10. Ensure POST body NEVER contains undefined, null, or NaN values
     // 11. Add defensive validation before submit
-    const lat = Number(reportingLocation?.[0] || 13.0827);
-    const lng = Number(reportingLocation?.[1] || 80.2707);
+    const lat = Number(reportingLocation?.[0] || DEFAULT_LOCATION.lat);
+    const lng = Number(reportingLocation?.[1] || DEFAULT_LOCATION.lng);
 
     if (isNaN(lat) || isNaN(lng)) {
-      alert("Invalid coordinates detected. Please select a valid location.");
+      notify.error("Invalid coordinates detected. Please select a valid location.");
       return;
     }
 
-    const type = formData.ramp ? 'ramp' :
+    const featureType = formData.ramp ? 'ramp' :
       formData.elevator ? 'elevator' :
         formData.bathroom ? 'bathroom' :
           formData.parking ? 'parking' :
@@ -77,37 +106,33 @@ export function AddDataScreen({ onBack, onSubmit, userLocation, initialName }: A
               formData.tactile ? 'tactile' :
                 formData.audioGuidance ? 'audio' : 'ramp';
 
-    const payload = {
-      latitude: lat,
-      longitude: lng,
-      type: type,
-      notes: formData.notes || "",
-      placeName: formData.location // Pass the selected address/name
-    };
-
-    console.log("[DEBUG] Submitting payload:", payload);
+    const placeName = formData.location || `Accessibility Report at ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
     try {
-      await api.post("/points", payload);
+      // ENSURE: Only use columns confirmed in the requested schema
+      const { error } = await supabase.from('accessibility_points').insert([{
+        place_name: placeName,
+        feature_type: featureType,
+        latitude: lat,
+        longitude: lng,
+        upvotes: 0,
+        downvotes: 0
+      }]);
+
+      if (error) throw error;
 
       setIsSuccess(true);
       setTimeout(() => {
         onSubmit();
       }, 2500);
     } catch (error: any) {
-      console.error("[DEBUG] Submission catch block:", error);
+      console.error("Supabase Submission Error:", error);
 
-      // 12. Update Axios error handling to show detailed server feedback
-      let errorMessage = "Network Error: Could not reach the server.";
+      let errorMessage = error.message || "An unexpected error occurred.";
+      if (error.details) errorMessage += ` (${error.details})`;
+      if (error.hint) errorMessage += ` Hint: ${error.hint}`;
 
-      if (error.response?.data) {
-        // Server responded with an error JSON (e.g., 503 DB unavailable or 400 Bad Request)
-        errorMessage = error.response.data.error || error.response.data.message || JSON.stringify(error.response.data);
-      } else if (error.message && error.message !== "Network Error") {
-        errorMessage = error.message;
-      }
-
-      alert(`Submission Failed: ${errorMessage}`);
+      notify.error(`Submission Failed: ${errorMessage}`, 6000);
     }
   };
 

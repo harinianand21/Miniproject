@@ -7,15 +7,26 @@ export default function App() {
   const [showVoiceOverlay, setShowVoiceOverlay] = useState(false);
   const navigate = useNavigate();
 
-  const handleStartNavigation = (location?: { lat: number; lng: number; name: string }) => {
-    if (!location) {
+  const handleStartNavigation = (location?: {
+    lat?: number;
+    lng?: number;
+    name?: string;
+    route?: Array<{ lat: number; lng: number }>;
+  }) => {
+    if (!location || (location.lat === undefined && location.lng === undefined)) {
       console.warn("No location provided for navigation");
       return;
     }
+    // Pass all location data including route to AR navigation
     navigate("/ar-navigation", { state: location });
   };
 
-  const handleAddData = (locationData?: { lat: number; lng: number; name: string }) => {
+  const handleAddData = (locationData?: {
+    lat?: number;
+    lng?: number;
+    name?: string;
+    featureType?: string;
+  }) => {
     navigate("/report", { state: locationData });
   };
 

@@ -1,12 +1,46 @@
 import { useState, useEffect, useRef } from 'react';
 import { Mic, X } from 'lucide-react';
-
+/**
+ * Props for the Voice Command Overlay component
+ * Handles speech recognition and voice-activated navigation
+ */
 interface VoiceCommandOverlayProps {
+  /**
+   * Callback to close the voice command overlay
+   */
   onClose: () => void;
-  onStartNavigation: (data?: { lat: number; lng: number; name: string }) => void;
-  onAddData: (data?: { lat: number; lng: number; name: string }) => void;
+
+  /**
+   * Callback to start AR navigation
+   * Triggered by voice commands like "start navigation"
+   * @param dest - Optional destination data for navigation
+   */
+  onStartNavigation: (dest?: {
+    lat?: number;
+    lng?: number;
+    name?: string;
+    route?: Array<{ lat: number; lng: number }>;
+  }) => void;
+
+  /**
+   * Callback to navigate to the Add Data screen
+   * Triggered by voice commands like "add report"
+   * @param locationData - Optional location data for the report
+   */
+  onAddData: (locationData?: {
+    lat?: number;
+    lng?: number;
+    name?: string;
+    featureType?: string;
+  }) => void;
+
+  /**
+   * Callback to stop ongoing navigation
+   * Triggered by voice commands like "stop"
+   */
   onStopNavigation: () => void;
 }
+
 
 // Declare global for TypeScript
 declare global {
@@ -160,7 +194,7 @@ export function VoiceCommandOverlay({
             </p>
           ) : (
             <p className="text-white/60 text-center">
-              Say "start navigation", "add report", or "stop"
+              Say "start navigation", "add ramp report", or "stop"
             </p>
           )}
         </div>
