@@ -25,7 +25,15 @@
             "@/*": [
                 "./src/*"
             ]
-        }
+        },
+        "types": [
+            "node",
+            "react",
+            "react-dom",
+            "leaflet",
+            "three",
+            "webxr"
+        ]
     },
     "include": [
         "src",
